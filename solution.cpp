@@ -9,66 +9,78 @@ using namespace std;
 const int MAXN = 3005;
 const int INF = 1e9;
 
+struct Edge {
+    int to, cap, flow;
+};
+
 int n, m;
-int capacity[MAXN][MAXN];
-int flow[MAXN][MAXN];
-vector<int> adj[MAXN];
+vector<Edge> edges;
+vector<int> graph[MAXN];
+int level[MAXN];
+int iter[MAXN];
 
-// BFS to find augmenting path from source to sink
-bool bfs(int source, int sink, vector<int>& parent) {
-    fill(parent.begin(), parent.end(), -1);
-    parent[source] = source;
+void addEdge(int from, int to, int cap) {
+    graph[from].push_back(edges.size());
+    edges.push_back({to, cap, 0});
+    graph[to].push_back(edges.size());
+    edges.push_back({from, cap, 0});
+}
 
-    queue<pair<int, int>> q;
-    q.push({source, INF});
+bool bfs(int s, int t) {
+    memset(level, -1, sizeof(level));
+    queue<int> q;
+    level[s] = 0;
+    q.push(s);
 
     while (!q.empty()) {
-        int u = q.front().first;
-        int curr_flow = q.front().second;
+        int v = q.front();
         q.pop();
-
-        for (int v : adj[u]) {
-            if (parent[v] == -1 && capacity[u][v] - flow[u][v] > 0) {
-                parent[v] = u;
-                int new_flow = min(curr_flow, capacity[u][v] - flow[u][v]);
-                if (v == sink) {
-                    return true;
-                }
-                q.push({v, new_flow});
+        for (int id : graph[v]) {
+            if (level[edges[id].to] < 0 && edges[id].cap > edges[id].flow) {
+                level[edges[id].to] = level[v] + 1;
+                q.push(edges[id].to);
             }
         }
     }
 
-    return false;
+    return level[t] >= 0;
 }
 
-// Edmonds-Karp algorithm for maximum flow
-int maxFlow(int source, int sink) {
-    // Reset flow for this computation
-    memset(flow, 0, sizeof(flow));
+int dfs(int v, int t, int pushed) {
+    if (v == t || pushed == 0) return pushed;
 
-    int total_flow = 0;
-    vector<int> parent(n + 1);
+    for (int& cid = iter[v]; cid < (int)graph[v].size(); cid++) {
+        int id = graph[v][cid];
+        int to = edges[id].to;
 
-    while (bfs(source, sink, parent)) {
-        // Find minimum residual capacity along the path
-        int path_flow = INF;
-        for (int v = sink; v != source; v = parent[v]) {
-            int u = parent[v];
-            path_flow = min(path_flow, capacity[u][v] - flow[u][v]);
+        if (level[v] + 1 != level[to] || edges[id].cap <= edges[id].flow)
+            continue;
+
+        int tr = dfs(to, t, min(pushed, edges[id].cap - edges[id].flow));
+        if (tr > 0) {
+            edges[id].flow += tr;
+            edges[id ^ 1].flow -= tr;
+            return tr;
         }
-
-        // Update flows along the path
-        for (int v = sink; v != source; v = parent[v]) {
-            int u = parent[v];
-            flow[u][v] += path_flow;
-            flow[v][u] -= path_flow;
-        }
-
-        total_flow += path_flow;
     }
 
-    return total_flow;
+    return 0;
+}
+
+int maxFlow(int s, int t) {
+    // Reset flows
+    for (auto& e : edges) {
+        e.flow = 0;
+    }
+
+    int flow = 0;
+    while (bfs(s, t)) {
+        memset(iter, 0, sizeof(iter));
+        while (int pushed = dfs(s, t, INF)) {
+            flow += pushed;
+        }
+    }
+    return flow;
 }
 
 int main() {
@@ -77,19 +89,10 @@ int main() {
 
     cin >> n >> m;
 
-    memset(capacity, 0, sizeof(capacity));
-
     for (int i = 0; i < m; i++) {
         int a, b;
         cin >> a >> b;
-
-        // Bidirectional edge with capacity 1
-        capacity[a][b] = 1;
-        capacity[b][a] = 1;
-
-        // Build adjacency list
-        adj[a].push_back(b);
-        adj[b].push_back(a);
+        addEdge(a, b, 1);
     }
 
     long long answer = 0;
@@ -97,8 +100,7 @@ int main() {
     // Calculate max flow for all pairs (a, b) where a < b
     for (int a = 1; a <= n; a++) {
         for (int b = a + 1; b <= n; b++) {
-            int max_flow = maxFlow(a, b);
-            answer += max_flow;
+            answer += maxFlow(a, b);
         }
     }
 
